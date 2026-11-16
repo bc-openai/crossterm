@@ -158,10 +158,7 @@ impl EventSource for UnixInternalEventSource {
                 loop {
                     let read_count = read_complete(&self.tty, &mut self.tty_buffer)?;
                     if read_count > 0 {
-                        self.parser.advance(
-                            &self.tty_buffer[..read_count],
-                            read_count == TTY_BUFFER_SIZE,
-                        );
+                        self.parser.buffer_external_input(&self.tty_buffer[..read_count]);
                     }
 
                     if let Some(event) = self.parser.next() {
@@ -437,6 +434,14 @@ impl Parser {
             }
             let more = idx + 1 < buffer.len() || more;
 
+            // A second Escape starts another input sequence. Emit the first one
+            // without consuming the prefix of the next report.
+            if self.buffer.as_slice() == b"\x1b" && *byte == b'\x1b' {
+                self.internal_events.push_back(InternalEvent::Event(Event::Key(
+                    crate::event::KeyCode::Esc.into(),
+                )));
+                self.buffer.clear();
+            }
             self.buffer.push(*byte);
 
             match parse_event(&self.buffer, more) {
@@ -502,6 +507,48 @@ mod tests {
             UnixInternalEventSource::from_file_descriptor(reader).unwrap(),
             writer,
         )
+    }
+
+    #[test]
+    fn live_mouse_report_survives_split_reads() {
+        let report = b"\x1b[<64;125;28M";
+        for split in 1..report.len() {
+            let (mut source, mut writer) = source_with_input();
+            writer.write_all(&report[..split]).unwrap();
+            assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(), None);
+            writer.write_all(&report[split..]).unwrap();
+            assert_eq!(
+                source.try_read(Some(Duration::ZERO)).unwrap(),
+                Some(InternalEvent::Event(Event::Mouse(crate::event::MouseEvent {
+                    kind: crate::event::MouseEventKind::ScrollUp,
+                    column: 124,
+                    row: 27,
+                    modifiers: crate::event::KeyModifiers::NONE,
+                })))
+            );
+            assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(), None);
+        }
+    }
+
+    #[test]
+    fn escape_followed_by_mouse_report_preserves_both_events() {
+        let (mut source, mut writer) = source_with_input();
+        writer.write_all(b"\x1b").unwrap();
+        assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(), None);
+        writer.write_all(b"\x1b[<64;125;28M").unwrap();
+        assert_eq!(
+            source.try_read(Some(Duration::ZERO)).unwrap(),
+            Some(InternalEvent::Event(Event::Key(KeyCode::Esc.into())))
+        );
+        assert_eq!(
+            source.try_read(Some(Duration::ZERO)).unwrap(),
+            Some(InternalEvent::Event(Event::Mouse(crate::event::MouseEvent {
+                kind: crate::event::MouseEventKind::ScrollUp,
+                column: 124,
+                row: 27,
+                modifiers: crate::event::KeyModifiers::NONE,
+            })))
+        );
     }
 
     #[test]
