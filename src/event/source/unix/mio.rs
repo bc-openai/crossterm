@@ -110,7 +110,8 @@ impl EventSource for UnixInternalEventSource {
                             match self.tty_fd.read(&mut self.tty_buffer) {
                                 Ok(read_count) => {
                                     if read_count > 0 {
-                                        self.parser.buffer_external_input(&self.tty_buffer[..read_count]);
+                                        self.parser
+                                            .buffer_external_input(&self.tty_buffer[..read_count]);
                                     }
                                 }
                                 Err(e) => {
@@ -390,9 +391,10 @@ impl Parser {
             // A second Escape starts another input sequence. Emit the first one
             // without consuming the prefix of the next report.
             if self.buffer.as_slice() == b"\x1b" && *byte == b'\x1b' {
-                self.internal_events.push_back(InternalEvent::Event(Event::Key(
-                    crate::event::KeyCode::Esc.into(),
-                )));
+                self.internal_events
+                    .push_back(InternalEvent::Event(Event::Key(
+                        crate::event::KeyCode::Esc.into(),
+                    )));
                 self.buffer.clear();
             }
             self.buffer.push(*byte);
@@ -472,12 +474,14 @@ mod tests {
             writer.write_all(&report[split..]).unwrap();
             assert_eq!(
                 source.try_read(Some(Duration::ZERO)).unwrap(),
-                Some(InternalEvent::Event(Event::Mouse(crate::event::MouseEvent {
-                    kind: crate::event::MouseEventKind::ScrollUp,
-                    column: 124,
-                    row: 27,
-                    modifiers: crate::event::KeyModifiers::NONE,
-                })))
+                Some(InternalEvent::Event(Event::Mouse(
+                    crate::event::MouseEvent {
+                        kind: crate::event::MouseEventKind::ScrollUp,
+                        column: 124,
+                        row: 27,
+                        modifiers: crate::event::KeyModifiers::NONE,
+                    }
+                )))
             );
             assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(), None);
         }
@@ -495,12 +499,14 @@ mod tests {
         );
         assert_eq!(
             source.try_read(Some(Duration::ZERO)).unwrap(),
-            Some(InternalEvent::Event(Event::Mouse(crate::event::MouseEvent {
-                kind: crate::event::MouseEventKind::ScrollUp,
-                column: 124,
-                row: 27,
-                modifiers: crate::event::KeyModifiers::NONE,
-            })))
+            Some(InternalEvent::Event(Event::Mouse(
+                crate::event::MouseEvent {
+                    kind: crate::event::MouseEventKind::ScrollUp,
+                    column: 124,
+                    row: 27,
+                    modifiers: crate::event::KeyModifiers::NONE,
+                }
+            )))
         );
     }
 
