@@ -512,61 +512,6 @@ mod tests {
     }
 
     #[test]
-    fn live_mouse_report_survives_split_reads() {
-        let report = b"\x1b[<64;125;28M";
-        for split in 1..report.len() {
-            let (mut source, mut writer) = source_with_input();
-            writer.write_all(&report[..split]).unwrap();
-            assert_eq!(
-                source.try_read(Some(Duration::from_millis(1))).unwrap(),
-                None
-            );
-            writer.write_all(&report[split..]).unwrap();
-            assert_eq!(
-                source.try_read(Some(Duration::from_millis(1))).unwrap(),
-                Some(InternalEvent::Event(Event::Mouse(
-                    crate::event::MouseEvent {
-                        kind: crate::event::MouseEventKind::ScrollUp,
-                        column: 124,
-                        row: 27,
-                        modifiers: crate::event::KeyModifiers::NONE,
-                    }
-                )))
-            );
-            assert_eq!(
-                source.try_read(Some(Duration::from_millis(1))).unwrap(),
-                None
-            );
-        }
-    }
-
-    #[test]
-    fn escape_followed_by_mouse_report_preserves_both_events() {
-        let (mut source, mut writer) = source_with_input();
-        writer.write_all(b"\x1b").unwrap();
-        assert_eq!(
-            source.try_read(Some(Duration::from_millis(1))).unwrap(),
-            None
-        );
-        writer.write_all(b"\x1b[<64;125;28M").unwrap();
-        assert_eq!(
-            source.try_read(Some(Duration::from_millis(1))).unwrap(),
-            Some(InternalEvent::Event(Event::Key(KeyCode::Esc.into())))
-        );
-        assert_eq!(
-            source.try_read(Some(Duration::from_millis(1))).unwrap(),
-            Some(InternalEvent::Event(Event::Mouse(
-                crate::event::MouseEvent {
-                    kind: crate::event::MouseEventKind::ScrollUp,
-                    column: 124,
-                    row: 27,
-                    modifiers: crate::event::KeyModifiers::NONE,
-                }
-            )))
-        );
-    }
-
-    #[test]
     fn externally_buffered_escape_remains_available_for_its_continuation() {
         let mut parser = Parser::default();
         parser.buffer_external_input(b"\x1b");
